@@ -45,14 +45,30 @@ router.patch('/users/:id', (req, res) => {
         return res.status(400).send({error : 'Invalid Update'});
     }
 
-    User.findByIdAndUpdate(req.params.id, req.body, {new: true, runValidators: true}).then((result) => {
-        if(!result){
-            res.status(404).send('No user found');
+    User.findById(req.params.id).then((user) => {
+        if(!user){
+            res.status(404).send('No User Found');
         }
-        res.send(result);
+        //console.log(user);
+        updates.forEach((update) => {
+            user[update] = req.body[update];
+        });
+
+        user.save().then((result) => {
+            res.send(result);
+        })
     }).catch((err) => {
         res.status(400).send(err);
     })
+
+    // User.findByIdAndUpdate(req.params.id, req.body, {new: true, runValidators: true}).then((result) => {
+    //     if(!result){
+    //         res.status(404).send('No user found');
+    //     }
+    //     res.send(result);
+    // }).catch((err) => {
+    //     res.status(400).send(err);
+    // })
 })
 
 router.delete('/users/:id', (req, res) => {

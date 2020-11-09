@@ -31,15 +31,21 @@ router.patch('/tasks/:id', (req, res) => {
         return res.status(400).send({error: 'Invalid Update'});
     }
 
-    Task.findByIdAndUpdate(req.params.id, req.body, {new: true, runValidators: true}).then((result) => {
-        if(!result){
+    Task.findById(req.params.id).then((task) => {
+        if(!task){
             res.status(404).send('No task found');
         }
 
-        res.send(result);
+        updates.forEach((update) => {
+            task[update] = req.body[update];
+        })
+
+        task.save().then((result) => {
+            res.send(result);
+        })
     }).catch((err) => {
         res.status(400).send(err);
-    })
+    });
 })
 
 router.delete('/tasks/:id', (req, res) => {
