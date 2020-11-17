@@ -1,6 +1,8 @@
 const mongoose = require('mongoose');
 const validator = require('validator');
 const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const Task = require('./Task');
 
 const userSchema = new mongoose.Schema({
     name: {
@@ -11,6 +13,7 @@ const userSchema = new mongoose.Schema({
     email: {
         type: String,
         required: true,
+        unique: true,
         trim: true,
         lowercase: true,
         validate(value){
@@ -31,36 +34,80 @@ const userSchema = new mongoose.Schema({
     password: {
         type: String,
         required: true,
+        minlength: 6,
         trim: true,
         validate(value){
-            if(!validator.isLength(value, {min: 6, max: 16})){
-                throw new Error('Password length must be between 6 and 16 characters');
-            }
             if(value.includes('password')){
                 throw new Error('Password mustn\'t contain the word password');
             }
         }
-    }
+    },
+    tokens: [{
+        token: {
+            type: String,
+            required: true
+        }
+    }]
 });
 
-userSchema.pre('save', function(next){ 
+userSchema.virtual('tasks', {
+    ref: 'Task',
+    localField: '_id',
+    foreignField: 'owner'
+});
+
+userSchema.methods.generateAuthToken = async function(){
     const user = this;
+    const token = jwt.sign({_id: user._id.toString()}, 'saltbae');
+    user.tokens = user.tokens.concat({token: token});
+    await user.save();
+    return token;
+}
 
+userSchema.methods.toJSON = function(){
+    const user = this;
+    const userObj = user.toObject();
+
+    delete userObj.password;
+    delete userObj.tokens;
+
+    return userObj;
+}
+
+userSchema.statics.findByCredentials = async (email, password) => {
+    try {
+        const user = await User.findOne({email: email});
+        //console.log(user);
+        if(!user)
+            throw new Error('Unable to login');
+        
+        const isMatch = await bcrypt.compare(password, user.password);
+
+        if(!isMatch)
+            throw new Error('Unable to login');
+        
+        return user;
+    } catch (error) {
+        res.status(400).send(error);
+    }
+    
+}
+
+userSchema.pre('save', async function(next){ 
+    const user = this;
+    //console.log('here');
     if(user.isModified('password')){
-        bcrypt.hash(user.password, 8).then((hash) => {
-            //console.log(hash);
-            user.password = hash;
-            next();
-        }).catch((err) => {
-            res.status(500).send(err);
-        })
+        user.password = await bcrypt.hash(user.password, 8);
     }
-    else{
-        next();
-    }
-
+    next();
     //console.log(user.password);
 });
+
+userSchema.pre('remove', async function (next){
+    const user = this;
+    await Task.deleteMany({owner: user._id});
+    next();
+})
 
 const User = mongoose.model('User', userSchema);
 
